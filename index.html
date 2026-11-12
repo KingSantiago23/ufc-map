@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Competitor Map: UFC and the MMA Promotions</title>
+<style>
+:root{--bg:#faf8f4;--card:#fff;--tx:#1d1d1b;--mu:#6b6860;--bd:#e3dfd6;--ac:#1f4e79}
+@media(prefers-color-scheme:dark){:root{--bg:#17171a;--card:#212125;--tx:#ececea;--mu:#a09d95;--bd:#34343a;--ac:#7fb2e0}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.55 Georgia,serif}
+main{max-width:960px;margin:0 auto;padding:20px 16px 60px}
+h1{font-size:26px;margin:0 0 4px}h2{font-size:18px;margin:26px 0 10px}
+.sub,.src{color:var(--mu)}.src{font:12px system-ui,sans-serif;margin-top:6px}.src a{color:var(--ac)}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:14px 16px;margin-bottom:12px}
+.wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;font:12.5px system-ui,sans-serif}
+th,td{padding:4px 6px;border-bottom:1px solid var(--bd);text-align:left;white-space:nowrap}
+td input{width:70px;padding:3px;border:1px solid var(--bd);border-radius:4px;background:var(--bg);color:var(--tx);font:inherit}
+td input.n{width:110px}
+button{font:600 13px system-ui,sans-serif;padding:6px 12px;border-radius:6px;border:1px solid var(--bd);background:var(--card);color:var(--tx);cursor:pointer}
+textarea{width:100%;height:90px;font:12px monospace;background:var(--bg);color:var(--tx);border:1px solid var(--bd);border-radius:6px}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
+svg text{fill:var(--tx);font:11px system-ui,sans-serif}
+</style></head><body><main>
+<h1>Competitor Map: UFC (TKO Holdings) and the MMA Promotions</h1>
+<p class="sub">Strategic groups found by the data, not drawn in advance. Standardise the attributes, find the two axes that explain the most variance (PCA), then let k-means find the groups. Edit any value or paste your own CSV and everything recomputes.</p>
+<div id="out"></div>
+<h2>Replace the data</h2>
+<div class="card"><p class="src" style="margin-top:0">Paste CSV: first column the competitor name, then at least five numeric columns, with a header row.</p>
+<textarea id="csv"></textarea><p><button id="go">Load CSV and recompute</button> <button id="rs">Reset to MMA dataset</button></p></div>
+<h2>Method, data and limits</h2><div class="card" id="lim"></div>
+</main>
+<script>
+const SRC1="https://mma.mkmlabs.pl/news/mmamarkt-global-organization-power-rankings-2026";
+const AT=[
+{k:"Live events per year",s:"event frequency",log:1,src:"MMAMarkt 2026 rankings; PFL and ONE 2026 announced schedules; derived where noted",u:SRC1},
+{k:"Years active (to 2026)",s:"age",log:0,src:"Founding year, MMAMarkt 2026 rankings",u:SRC1},
+{k:"Instagram followers (M)",s:"Instagram reach",log:1,src:"MMAMarkt 2026 rankings (March 2026)",u:SRC1},
+{k:"YouTube subscribers (M)",s:"YouTube reach",log:1,src:"MMAMarkt 2026 rankings (March 2026)",u:SRC1},
+{k:"Facebook followers (M)",s:"Facebook reach",log:1,src:"MMAMarkt 2026 rankings (March 2026)",u:SRC1},
+{k:"Broadcast reach (1-3, my coding)",s:"broadcast reach",log:0,src:"Coded by me from broadcast deals in MMAMarkt: 3 = major US network or streamer, 2 = multi-country distribution, 1 = domestic or own platform",u:SRC1}];
+const DATA=[["UFC",43,33,49.8,21.7,33.7,3],["ONE Championship",72,15,11,11.2,52,3],["PFL",24,8,4,1.2,2.5,3],["KSW",11,22,0.602,0.89,1.09,1],["Oktagon MMA",12,8,0.883,0.495,0.75,2],["ACA",17,12,2,1.5,0.15,1],["Rizin",9,11,0.397,0.5,0.3,1],["Brave CF",11,10,0.455,0.35,0.5,1],["LFA",25,9,0.172,0.08,1.05,1],["Combate Global",20,15,0.173,0.1,0.2,1],["EFC",10,17,0.058,0.03,0.1,2],["Road FC",6,16,0.071,0.05,0.03,1]];
+const PAL=["#b5473a","#2f6f9f","#4f8a4f","#c28a1c","#7a5aa6"];
+const d2=(a,b)=>a.reduce((s,v,i)=>s+(v-b[i])**2,0);
+function eig(A){const n=A.length,a=A.map(r=>r.slice()),V=A.map((_,i)=>A.map((_,j)=>i===j?1:0));
+for(let s=0;s<100;s++){let p=0,q=1,m=0;for(let i=0;i<n;i++)for(let j=i+1;j<n;j++)if(Math.abs(a[i][j])>m){m=Math.abs(a[i][j]);p=i;q=j}
+if(m<1e-12)break;const th=(a[q][q]-a[p][p])/(2*a[p][q]),t=Math.sign(th||1)/(Math.abs(th)+Math.sqrt(th*th+1)),c=1/Math.sqrt(t*t+1),sn=t*c;
+for(let k=0;k<n;k++){const x=a[k][p],y=a[k][q];a[k][p]=c*x-sn*y;a[k][q]=sn*x+c*y}
+for(let k=0;k<n;k++){const x=a[p][k],y=a[q][k];a[p][k]=c*x-sn*y;a[q][k]=sn*x+c*y}
+for(let k=0;k<n;k++){const x=V[k][p],y=V[k][q];V[k][p]=c*x-sn*y;V[k][q]=sn*x+c*y}}
+const v=a.map((r,i)=>r[i]),ix=v.map((_,i)=>i).sort((x,y)=>v[y]-v[x]);
+return{vals:ix.map(i=>v[i]),vecs:ix.map(i=>V.map(r=>r[i]))}}
+function rng(s){return()=>(s=(s*1664525+1013904223)%4294967296)/4294967296}
+function km(Z,k){const r=rng(7),n=Z.length;let best=null;
+for(let rep=0;rep<40;rep++){let c=[Z[Math.floor(r()*n)].slice()];
+while(c.length<k){const d=Z.map(z=>Math.min(...c.map(q=>d2(z,q)))),s=d.reduce((a,b)=>a+b);let u=r()*s,i=0;for(;i<n-1&&u>d[i];i++)u-=d[i];c.push(Z[i].slice())}
+let lab=Array(n).fill(-1);
+for(let it=0;it<100;it++){const nl=Z.map(z=>{let b=0;c.forEach((q,j)=>{if(d2(z,q)<d2(z,c[b]))b=j});return b});
+if(nl.every((v,i)=>v===lab[i]))break;lab=nl;c=c.map((q,j)=>{const m=Z.filter((_,i)=>lab[i]===j);return m.length?q.map((_,d)=>m.reduce((s,z)=>s+z[d],0)/m.length):q})}
+const inr=Z.reduce((s,z,i)=>s+d2(z,c[lab[i]]),0);if(!best||inr<best.inr-1e-9)best={lab,inr}}
+return best.lab}
+function sil(Z,lab){const n=Z.length;let t=0;for(let i=0;i<n;i++){const own=[],o={};Z.forEach((z,j)=>{if(j===i)return;const d=Math.sqrt(d2(Z[i],z));if(lab[j]===lab[i])own.push(d);else(o[lab[j]]=o[lab[j]]||[]).push(d)});
+if(!own.length)continue;const a=own.reduce((x,y)=>x+y)/own.length,b=Math.min(...Object.values(o).map(v=>v.reduce((x,y)=>x+y)/v.length));t+=(b-a)/Math.max(a,b)}return t/n}
+function analyze(rows,attrs){
+const n=rows.length,p=attrs.length,X=rows.map(r=>r.slice(1).map((v,j)=>attrs[j].log?Math.log(v):v));
+const mu=attrs.map((_,j)=>X.reduce((s,r)=>s+r[j],0)/n),sd=attrs.map((_,j)=>Math.sqrt(X.reduce((s,r)=>s+(r[j]-mu[j])**2,0)/n)||1);
+const Z=X.map(r=>r.map((v,j)=>(v-mu[j])/sd[j])),cov=attrs.map((_,i)=>attrs.map((_,j)=>Z.reduce((s,z)=>s+z[i]*z[j],0)/n));
+const E=eig(cov),tv=E.vals.reduce((a,b)=>a+b),ev=E.vals.map(v=>v/tv);
+const fi=0;let L=[0,1].map(i=>E.vecs[i].map(v=>v*Math.sqrt(E.vals[i])));
+L=L.map(l=>(l.reduce((s,v)=>s+v,0)<0)?l.map(v=>-v):l);
+const sg=L.map((l,i)=>l[fi]>=0?1:-1);
+const P=Z.map(z=>[0,1].map(i=>z.reduce((s,v,j)=>s+v*E.vecs[i][j],0)));
+const sc=P.map(r=>r.map((v,i)=>v*(Math.sign(E.vecs[i].reduce((s,v)=>s+v,0))||1)));
+const silK={};let bk=2,bs=-2;for(let k=2;k<=Math.min(5,n-2);k++){const l=km(Z,k);silK[k]=sil(Z,l);if(silK[k]>bs){bs=silK[k];bk=k}}
+let lab=km(Z,bk);const mf=c=>{const m=lab.map((l,i)=>l===c?rows[i][1]:null).filter(v=>v!==null);return m.reduce((a,b)=>a+b,0)/(m.length||1)};
+const ord=[...Array(bk).keys()].sort((a,b)=>mf(b)-mf(a));lab=lab.map(l=>ord.indexOf(l));
+const groups=[...Array(bk).keys()].map(c=>{const m=lab.map((l,i)=>l===c?i:-1).filter(i=>i>=0),cz=attrs.map((_,j)=>m.reduce((s,i)=>s+Z[i][j],0)/m.length);
+const top=cz.map((v,j)=>[Math.abs(v),j,v]).sort((a,b)=>b[0]-a[0]).slice(0,3).map(([,j,v])=>(v>0?"high ":"low ")+attrs[j].s);
+return{m,top,mean:attrs.map((a,j)=>m.reduce((s,i)=>s+rows[i][j+1],0)/m.length)}});
+return{names:rows.map(r=>r[0]),Z,ev,L,sc,lab,bk,silK,groups,sil:bs}}
+const axName=(L,at)=>{const o=L.map((v,j)=>[v,j]).sort((a,b)=>Math.abs(b[0])-Math.abs(a[0])).slice(0,3);return o.map(([v,j])=>at[j].s+(v>0?" (+)":" (−)")).join(", ")};
+const $=id=>document.getElementById(id);let rows=DATA.map(r=>r.slice());
+function render(){
+const R=analyze(rows,AT),n=rows.length,x=R.sc.map(s=>s[0]),y=R.sc.map(s=>s[1]);
+const W=640,Hh=400,pd=50,mx=Math.max(...x.map(Math.abs))*1.25,my=Math.max(...y.map(Math.abs))*1.25;
+const X=v=>W/2+v/mx*(W/2-pd),Y=v=>Hh/2-v/my*(Hh/2-pd);
+let svg=`<svg viewBox="0 0 ${W} ${Hh}" width="100%" role="img" aria-label="Strategic group map"><line x1="${pd/2}" y1="${Hh/2}" x2="${W-pd/2}" y2="${Hh/2}" stroke="var(--bd)"/><line x1="${W/2}" y1="${pd/2}" x2="${W/2}" y2="${Hh-pd/2}" stroke="var(--bd)"/>`;
+AT.forEach((a,j)=>{const ax=R.L[0][j]*Math.min(W,Hh)*.12,ay=R.L[1][j]*Math.min(W,Hh)*.12;svg+=`<line x1="${W/2}" y1="${Hh/2}" x2="${W/2+ax}" y2="${Hh/2-ay}" stroke="var(--mu)" stroke-dasharray="3 3"/><text x="${W/2+ax*1.08}" y="${Hh/2-ay*1.08}" style="fill:var(--mu);font-size:10px">${a.s}</text>`});
+R.names.forEach((nm,i)=>{svg+=`<circle cx="${X(x[i])}" cy="${Y(y[i])}" r="7" fill="${PAL[R.lab[i]]}"/><text x="${X(x[i])+10}" y="${Y(y[i])+4}">${nm}</text>`});
+svg+=`<text x="${W-pd/2}" y="${Hh-6}" text-anchor="end">PC1 (${(R.ev[0]*100).toFixed(0)}% of variance) →</text><text x="8" y="14">PC2 (${(R.ev[1]*100).toFixed(0)}%) ↑</text></svg>`;
+let H=`<h2>Attribute table</h2><div class="card wrap"><table><tr><th>Competitor</th>${AT.map(a=>`<th>${a.k}</th>`).join("")}</tr>`;
+rows.forEach((r,i)=>{H+=`<tr><td><input class="n" data-i="${i}" data-j="0" value="${r[0]}"></td>${r.slice(1).map((v,j)=>`<td><input data-i="${i}" data-j="${j+1}" value="${v}"></td>`).join("")}</tr>`});
+H+=`</table><div class="src">Sources: ${AT.map(a=>`${a.s}: <a href="${a.u}" target="_blank" rel="noopener">${a.src}</a>`).join(" · ")}</div></div>
+<h2>The map the data produced</h2><div class="card">${svg}<div class="src">Position comes from PCA on standardised attributes; colour comes from k-means on all attributes, not just the two plotted. Dashed arrows show how each attribute pulls.</div></div>
+<h2>Groups found (k = ${R.bk})</h2><div class="card">`;
+R.groups.forEach((g,c)=>{H+=`<p><span class="dot" style="background:${PAL[c]}"></span><b>Group ${c+1}: ${g.m.map(i=>R.names[i]).join(", ")}</b><br><span class="src">Defined by ${g.top.join(", ")}. Group averages: ${AT.slice(0,3).map((a,j)=>a.s+" "+(+g.mean[j].toFixed(1))).join(", ")}.</span></p>`});
+H+=`<div class="src">Silhouette by k (higher is cleaner separation): ${Object.entries(R.silK).map(([k,v])=>`k=${k}: ${v.toFixed(2)}`).join(" · ")}. k = ${R.bk} chosen as the best.</div></div>
+<h2>What the axes represent</h2><div class="card"><p><b>PC1 (${(R.ev[0]*100).toFixed(0)}%)</b>: ${axName(R.L[0],AT)}.<br><b>PC2 (${(R.ev[1]*100).toFixed(0)}%)</b>: ${axName(R.L[1],AT)}.</p>
+<p class="src">Together the two axes keep ${((R.ev[0]+R.ev[1])*100).toFixed(0)}% of the variance. Interpretation is a human reading of the loadings; the tool only reports the numbers.</p></div>`;
+const tier=v=>v<0.3?0:v<3?1:2,nt=rows.map(r=>tier(r[3]));let ag=0,pr=0;
+for(let i=0;i<n;i++)for(let j=i+1;j<n;j++){pr++;if((nt[i]===nt[j])===(R.lab[i]===R.lab[j]))ag++}
+let nn=null;for(let i=0;i<n;i++)for(let j=i+1;j<n;j++){const d=Math.sqrt(d2(R.Z[i],R.Z[j]));if(!nn||d<nn[0])nn=[d,i,j]}
+const odd=R.groups.flatMap(g=>{const cnt={};g.m.forEach(i=>cnt[nt[i]]=(cnt[nt[i]]||0)+1);const mode=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])[0];return g.m.filter(i=>nt[i]!=mode).map(i=>R.names[i])});
+H+=`<h2>Check against the map you would have drawn by hand</h2><div class="card"><p>A hand-drawn social-following grouping (Instagram followers: over 3M, 0.3M to 3M, under 0.3M) agrees with the data on ${(ag/pr*100).toFixed(0)}% of competitor pairs. ${odd.length?`Competitors whose following tier differs from the rest of their data group: <b>${odd.join(", ")}</b>.`:"Every data group is also a single following tier."} The two closest competitors across all attributes are <b>${R.names[nn[1]]}</b> and <b>${R.names[nn[2]]}</b>.</p><p class="src">High agreement means either the industry is legible or too few attributes were used. Low agreement means following alone was hiding structure.</p></div>`;
+$("out").innerHTML=H;
+document.querySelectorAll("td input").forEach(e=>e.onchange=()=>{const i=+e.dataset.i,j=+e.dataset.j;if(j===0)rows[i][0]=e.value;else{const v=parseFloat(e.value);if(v>0)rows[i][j]=v}render()});
+}
+$("csv").value="Competitor,"+AT.map(a=>a.k.replace(/,/g,"")).join(",")+"\n"+DATA.map(r=>r.join(",")).join("\n");
+$("go").onclick=()=>{try{const L=$("csv").value.trim().split(/\n/).map(l=>l.split(",").map(s=>s.trim()));const h=L.shift();if(h.length<6)throw 0;
+const nr=L.map(r=>[r[0],...r.slice(1).map(Number)]);if(nr.length<5||nr.some(r=>r.slice(1).some(v=>!(v>0))))throw 0;
+AT.length=0;h.slice(1).forEach(k=>AT.push({k,s:k.toLowerCase(),log:0,src:"user supplied",u:"#"}));rows=nr;render()}catch(e){alert("Need a header, at least 5 competitors and at least 5 positive numeric columns.")}};
+$("rs").onclick=()=>location.reload();
+$("lim").innerHTML=`<b>Why PCA plus k-means.</b> The attributes overlap (social reach, event volume), so PCA finds the few directions that carry most of the spread and gives a map nobody drew in advance. k-means on all standardised attributes finds groups without assuming them, and silhouette score picks the number of groups. Attributes are z-scored; counts that span orders of magnitude (events, followers) are log-transformed so UFC’s scale does not flatten everyone else.<br><br>
+<b>Limits.</b> Twelve promotions and six attributes is a small sample. Three attributes are social-media reach and are strongly correlated, so reach is effectively triple-weighted. There is no price, athlete-pay, revenue or quality attribute because those are not published for most promotions. Event frequency for Oktagon, ACA, Brave CF and Road FC is my estimate (events held divided by years active); ONE’s, PFL’s and Combate Global’s are announced 2026 plans. Broadcast reach is my own 1 to 3 coding. Follower counts are March 2026 and change quickly; PFL’s include legacy Bellator accounts. The map shows who looks alike on these attributes, not why, and says nothing about fighter talent, finances or strategy.`;
+render();
+</script></body></html>
